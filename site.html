@@ -1,73 +1,156 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" 
-          content="width=device-width, initial-scale=1.0">
-      <title>Instrument</title>
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Processing with Canvas</title>
     <style>
-    .button {
-        border: none;
-        color: rgb(117, 239, 239);
-        padding: 32px 64px;
-        text-align: center;
-        text-decoration: none;
-        display: inline-block;
-        font-size: 24px;
-        margin: 8px 4px;
-        cursor: pointer;
-    }
-    .imgButton {background-color: #241649;}
-    .vidButton {background-color: #166c39;}
-
-    .imgButton:hover {
-    background-color: #8e74d5;
-    color: white;
-    }
-    .vidButton:hover {
-    background-color: #7dc299;
-    color: white;
-    }
-
+        body { text-align: center; }
+        canvas { border: 1px solid black; margin-top: 20px; }
+        .button { padding: 10px 20px; font-size: 18px; cursor: pointer; margin-top: 20px; }
+        .imgButton { background-color: #241649; color: white; }
+        .imgButton:hover { background-color: #8e74d5; }
     </style>
 </head>
-
-<html>
 <body>
 
-<h1>Upload a Single Image or a Video</h1>
-<button class="button imgButton" onclick="uploadImg()">Upload an Image</button>
-<button class="button vidButton">Upload a Video</button>
+    <h1>Upload and Process an Image</h1>
+    
+    <button class="button imgButton" onclick="triggerImageUpload()">Upload Image</button>
+    <input type="file" id="upload" style="display: none;" onchange="handleImageUpload(event)" accept="image/*">
 
-<div id="uploadImage">
-    <h1 style="color:rgb(158, 113, 177);">Drag your file into the box below:</h1>
-    <form action="upload.php" method="post" enctype="multipart/form-data">
-        <label for="imageUpload">Choose an image to upload:</label>
-        <input type="file" id="imageUpload" name="image" accept="image/*">
-        <input type="submit" value="Upload Image">
-    </form>
-</div>
+    <canvas id="canvas"></canvas>
+    <div id="shapesInfo" style="margin-top: 20px;"></div>
 
-<!-- <div id="uploadVideo">
-    <h1 style="color:rgb(109, 179, 109);">Drag your file into the box below:</h1>
-    <form action="upload.php" method="post" enctype="multipart/form-data">
-        <label for="videoUpload">Choose a video to upload:</label>
-        <input type="file" id="videoUpload" name="video" accept="video/*">
-        <input type="submit" value="Upload Video">
-    </form>
-</div> -->
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let imageData = null;
 
-<script>
-    function uploadImg() {
-        document.getElementById("uploadImage").innerHTML;
-    }
+        function triggerImageUpload() {
+            document.getElementById('upload').click();
+        }
 
-    // function uploadVid() {
-    //     document.getElementById("uploadVideo").innerHTML;
-    // }
-</script>
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const img = new Image();
+            img.onload = function() {
+                const aspectRatio = img.height / img.width;
+                const newHeight = 64 * aspectRatio;
+                canvas.width = 64;
+                canvas.height = newHeight;
+                ctx.drawImage(img, 0, 0, newWidth, newHeight);
+                imageData = ctx.getImageData(0, 0, newWidth, newHeight);
+                const pixels = getPixels(imageData);
+                const shapes = getShapes(pixels);
+
+                displayShapesInfo(shapes);
+            };
+            img.src = URL.createObjectURL(file);
+        }
+
+        function getPixels(imageData) {
+            const pixels = [];
+            const width = imageData.width;
+            const height = imageData.height;
+            let i = 0;
+            
+            for (let y = 0; y < height; y++) {
+                const row = [];
+                for (let x = 0; x < width; x++) {
+                    const index = (y * width + x) * 4;
+                    const rgba = [
+                    Math.round(imageData.data[index] / 50) * 50,
+                    Math.round(imageData.data[index + 1] / 50) * 50,
+                    Math.round(imageData.data[index + 2] / 50) * 50,
+                    imageData.data[index + 3]
+                    ];
+                    row.push(rgba);
+                }
+                pixels.push(row);
+            }
+
+            return pixels;
+        }
+        function getShapes(pixels) {
+            const rows = pixels.length;
+            const cols = pixels[0].length;
+            let s = 0;
+            const shapes = {};
+            const neighbors = [];
+
+            for (let i = 0; i < rows; i++) {
+                for (let j = 0; j < cols; j++) {
+                    if (pixels[i][j][3] !== 0) {
+                        const start = pixels[i][j];
+                        shapes[s] = [[start[0], start[1], start[2], start[3]], [i, j]];
+                        let neighborCount = 0;
+
+                        if (j < cols - 1 && pixels[i][j + 1][3] !== 0) {
+                            neighbors.push([i, j + 1, pixels[i][j + 1]]);
+                            neighborCount++;
+                        }
+                        if (i < rows - 1 && pixels[i + 1][j][3] !== 0) {
+                            neighbors.push([i + 1, j, pixels[i + 1][j]]);
+                            neighborCount++;
+                        }
+
+                        pixels[i][j][3] = 0;
+
+                        while (neighborCount > 0) {
+                            const n = neighbors[neighborCount - 1];
+                            const nPix = n[2];
+                            pixels[n[0]][n[1]] = [nPix[0], nPix[1], nPix[2], 0];
+                            neighbors.pop();
+                            neighborCount--;
+
+                            if (nPix[0] === start[0] && nPix[1] === start[1] && nPix[2] === start[2]) {
+                                shapes[s].push([n[0], n[1]]);
+                                addNeighbors(n, pixels, neighbors, rows, cols);
+                            }
+                        }
+                        s++;
+                    }
+                }
+            }
+
+            return shapes;
+        }
+
+        function addNeighbors(n, pixels, neighbors, rows, cols) {
+            const [x, y] = [n[0], n[1]];
+
+            const directions = [
+                [-1, 0], [1, 0], [0, -1], [0, 1]
+            ];
+
+            for (const [dx, dy] of directions) {
+                const nx = x + dx, ny = y + dy;
+                if (nx >= 0 && nx < rows && ny >= 0 && ny < cols && pixels[nx][ny][3] !== 0) {
+                    if (!neighbors.some(neighbor => neighbor[0] === nx && neighbor[1] === ny)) {
+                        neighbors.push([nx, ny, pixels[nx][ny]]);
+                    }
+                }
+            }
+        }
+
+        function displayShapesInfo(shapes) {
+            const shapesInfoDiv = document.getElementById('shapesInfo');
+            shapesInfoDiv.innerHTML = '';
+
+            const shapesList = document.createElement('ul');
+            for (const shapeId in shapes) {
+                const shape = shapes[shapeId];
+                const listItem = document.createElement('li');
+                listItem.textContent = `Shape ${shapeId}: Starting at [${shape[1]}] with color [${shape[0].slice(0, 3)}]`;
+                shapesList.appendChild(listItem);
+            }
+            shapesInfoDiv.appendChild(shapesList);
+        }
+    </script>
 
 </body>
 </html>
+
