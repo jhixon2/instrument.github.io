@@ -310,8 +310,22 @@
         function getSound(maxSize, size, color, luminance) {
             const volume = mapper(size, 0, maxSize, 50, 70);
             const frequency = mapper(luminance, 0, 255, 100, 750);
-            const harmonics = [mapper(color[0], 0, 255, 0.1, 0.9), mapper(color[1], 0, 255, 0.1, 0.9), mapper(color[2], 0, 255, 0.1, 0.9)];
-            return [volume, frequency, harmonics]
+            // const harmonics = [mapper(color[0], 0, 255, 0.1, 0.9), mapper(color[1], 0, 255, 0.1, 0.9), mapper(color[2], 0, 255, 0.1, 0.9)];
+            if (color[0] > color[1]) {
+                if (color[0] > color[2]) {
+                    timbre = "triangle";
+                }
+                else {
+                    timbre = "sawtooth";
+                }
+            }
+            else if (color[1] > color[2]) {
+                timbre = "square";
+            }
+            else {
+                timbre = "sine";
+            }
+            return [volume, frequency, timbre]
         }
 
         function mapper(val, x, y, a, b) {
@@ -334,8 +348,7 @@
 
         function playSound(sound) {
             osc.frequency.value = sound[1];
-            osc.type = 'custom';
-            osc.partials = sound[2];
+            osc.type = sound[2];
             osc.toDestination();
             osc.start();
         }
