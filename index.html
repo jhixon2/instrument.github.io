@@ -35,17 +35,37 @@
             const file = event.target.files[0];
             if (!file) return;
 
+            let scaler = 128;
+
             const img = new Image();
             img.onload = function() {
-                const aspectRatio = img.height / img.width;
-                const newHeight = 64 * aspectRatio;
-                canvas.width = 64;
-                canvas.height = newHeight;
-                ctx.drawImage(img, 0, 0, newWidth, newHeight);
-                imageData = ctx.getImageData(0, 0, newWidth, newHeight);
-                const pixels = getPixels(imageData);
+                const ogHeight = img.height;
+                const ogWidth = img.width;
+                const aspectRatio = ogHeight/ ogWidth;
+                const newHeight = Math.round(scaler * aspectRatio);
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCanvas.width = scaler;
+                tempCanvas.height = newHeight;
+                tempCtx.drawImage(img, 0, 0, scaler, newHeight);
+                imageData = tempCtx.getImageData(0, 0, scaler, newHeight);
+                let pixels = getPixels(imageData);
+                for (let i = 0; i < scaler; i++) {
+                    for (let j = 0; j < newHeight; j++){
+                        let index = (j * scaler + i) * 4;
+                        const [r, g, b, a] = pixels[j][i];
+                        imageData.data[index] = r;
+                        imageData.data[index + 1] = g;
+                        imageData.data[index + 2] = b;
+                        imageData.data[index + 3] = a;
+                    }
+                }
+                canvas.width = ogWidth;
+                canvas.height = ogHeight;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                tempCtx.putImageData(imageData, 0, 0);
+                ctx.drawImage(tempCanvas, 0, 0, ogWidth, ogHeight);
                 const shapes = getShapes(pixels);
-
                 displayShapesInfo(shapes);
             };
             img.src = URL.createObjectURL(file);
@@ -56,15 +76,19 @@
             const width = imageData.width;
             const height = imageData.height;
             let i = 0;
+            let rounder = 128;
             
             for (let y = 0; y < height; y++) {
                 const row = [];
                 for (let x = 0; x < width; x++) {
                     const index = (y * width + x) * 4;
+                    imageData.data[index] = Math.round(imageData.data[index] / rounder) * rounder;
+                    imageData.data[index + 1] = Math.round(imageData.data[index + 1] / rounder) * rounder;
+                    imageData.data[index + 2] = Math.round(imageData.data[index + 2] / rounder) * rounder;
                     const rgba = [
-                    Math.round(imageData.data[index] / 50) * 50,
-                    Math.round(imageData.data[index + 1] / 50) * 50,
-                    Math.round(imageData.data[index + 2] / 50) * 50,
+                    imageData.data[index],
+                    imageData.data[index + 1],
+                    imageData.data[index + 2],
                     imageData.data[index + 3]
                     ];
                     row.push(rgba);
@@ -97,8 +121,6 @@
                             neighborCount++;
                         }
 
-                        pixels[i][j][3] = 0;
-
                         while (neighborCount > 0) {
                             const n = neighbors[neighborCount - 1];
                             const nPix = n[2];
@@ -108,18 +130,18 @@
 
                             if (nPix[0] === start[0] && nPix[1] === start[1] && nPix[2] === start[2]) {
                                 shapes[s].push([n[0], n[1]]);
-                                addNeighbors(n, pixels, neighbors, rows, cols);
+                                neighborCount = addNeighbors(n, pixels, neighbors, rows, cols, neighborCount);
                             }
                         }
+                        pixels[i][j][3] = 0;
                         s++;
                     }
                 }
             }
-
             return shapes;
         }
 
-        function addNeighbors(n, pixels, neighbors, rows, cols) {
+        function addNeighbors(n, pixels, neighbors, rows, cols, neighborCount) {
             const [x, y] = [n[0], n[1]];
 
             const directions = [
@@ -131,9 +153,12 @@
                 if (nx >= 0 && nx < rows && ny >= 0 && ny < cols && pixels[nx][ny][3] !== 0) {
                     if (!neighbors.some(neighbor => neighbor[0] === nx && neighbor[1] === ny)) {
                         neighbors.push([nx, ny, pixels[nx][ny]]);
+                        neighborCount++;
                     }
                 }
             }
+            
+            return neighborCount;
         }
 
         function displayShapesInfo(shapes) {
