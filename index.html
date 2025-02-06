@@ -15,10 +15,15 @@
 </head>
 <body>
 
-    <h1>Upload and Process an Image</h1>
+    <h1>Upload an Image or Video</h1>
     
     <button class="button imgButton" onclick="triggerImageUpload()">Upload Image</button>
     <input type="file" id="upload" style="display: none;" onchange="handleImageUpload(event)" accept="image/*">
+
+    <button class="button vidButton" onclick="triggerVideoUpload()">Upload Video</button>
+    <input type="file" id="uploadVid" style="display: none;" onchange="handleVideoUpload(event)" accept="video/*">
+
+    <button class="button muteButton" id="muteButton" onclick="mute()" style="display: none;">Mute</button>
 
     <canvas id="canvas"></canvas>
     <div id="shapesInfo" style="margin-top: 20px;"></div>
@@ -29,6 +34,10 @@
         const ctx = canvas.getContext('2d');
         let imageData = null;
         let sounds = {};
+
+        function mute() {
+            osc.stop();
+        }
 
         function triggerImageUpload() {
             document.getElementById('upload').click();
@@ -63,15 +72,16 @@
                         imageData.data[index + 3] = a;
                     }
                 }
-                canvas.width = ogWidth;
-                canvas.height = ogHeight;
+                canvas.width = 500;
+                canvas.height = 500 * aspectRatio;
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 tempCtx.putImageData(imageData, 0, 0);
-                ctx.drawImage(tempCanvas, 0, 0, ogWidth, ogHeight);
+                ctx.drawImage(tempCanvas, 0, 0, 500, 500 * aspectRatio);
                 const shapes = getShapes(pixels);
-                displayShapesInfo(shapes);
+                // displayShapesInfo(shapes);
                 const sounds = getSoundsByPixel(shapes);
                 console.log(sounds);
+                document.getElementById("muteButton").style.display = "inline";
                 canvas.addEventListener('click', function(event) {
                     console.log("Click");
                     const canvasRect = canvas.getBoundingClientRect();
@@ -217,7 +227,7 @@
         }
 
         function getSound(maxSize, size, color, luminance) {
-            const volume = mapper(size, 1, maxSize, 50, 70);
+            const volume = mapper(size, 0, maxSize, 50, 70);
             const frequency = mapper(luminance, 0, 255, 100, 750);
             const harmonics = [mapper(color[0], 0, 255, 0.1, 0.9), mapper(color[1], 0, 255, 0.1, 0.9), mapper(color[2], 0, 255, 0.1, 0.9)];
             return [volume, frequency, harmonics]
@@ -248,6 +258,80 @@
             osc.toDestination();
             osc.start();
             console.log(sound);
+        }
+
+        function triggerVideoUpload() {
+            document.getElementById('uploadVid').click();
+        }
+
+        function handleVideoUpload(event) {
+            console.log(0);
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const video = document.createElement('video');
+            const url = URL.createObjectURL(file);
+            video.src = url;
+            video.muted = true;
+            document.body.appendChild(video);
+
+            video.onloadeddata = function() {
+                video.play();
+                processVideoFrames(video);
+            };
+
+            video.addEventListener('ended', function() {
+                osc.stop();
+            });
+        }
+
+        function processVideoFrames(video) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            let frames = [];
+            let currentTime = 0;
+            video.onplay = () => {
+                let interval = setInterval(() => {
+                    if (currentTime < video.duration) {
+                        video.currentTime = currentTime;
+                        currentTime += 0.0421;
+                        processFrame(video, canvas, ctx, frames.length);
+                        frames.push(canvas.toDataURL());
+                    } else {
+                        clearInterval(interval);
+                    }
+                }, 42);
+            };
+        }
+
+        function processFrame(video, canvas, ctx, frameIndex) {
+            const width = video.videoWidth;
+            const height = video.videoHeight;
+            canvas.width = width;
+            canvas.height = height;
+            ctx.drawImage(video, 0, 0, width, height);
+
+            const imageData = ctx.getImageData(0, 0, width, height);
+            const pixels = [];
+            data = imageData.data;
+            bigPixel = [0, 0, 0, 0];
+            pixelCount = 0;
+            for (let i = 0; i < data.length; i += 4) {
+                if (data[i + 3] > 0) {
+                    bigPixel[0] += data[i];
+                    bigPixel[1] += data[i + 1];
+                    bigPixel[2] += data[i + 2];
+                    pixelCount += 1;
+                }
+            }
+            const color = [
+            Math.round(bigPixel[0] / pixelCount),
+            Math.round(bigPixel[1] / pixelCount),
+            Math.round(bigPixel[2] / pixelCount),
+            1];
+            const luminance = (color[0] * 0.2126) + (color[1] * 0.7152) + (color[2] * 0.0722);
+            const sound = getSound(1, Math.random(), color, luminance);
+            playSound(sound);
         }
 
     </script>
