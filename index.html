@@ -5,11 +5,90 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Image Processing with Canvas</title>
     <style>
-        body { text-align: center; }
-        canvas { border: 1px solid black; margin-top: 20px; }
-        .button { padding: 10px 20px; font-size: 18px; cursor: pointer; margin-top: 20px; }
-        .imgButton { background-color: #241649; color: white; }
-        .imgButton:hover { background-color: #8e74d5; }
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #0e0115;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            color: rgb(251, 247, 219);
+            margin-bottom: 20px;
+        }
+
+        canvas {
+            border: 2px solid #8e74d5;
+            margin-top: 20px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+
+        canvas:hover {
+            transform: scale(1.05);
+        }
+
+        .button {
+            padding: 12px 24px;
+            font-size: 18px;
+            cursor: pointer;
+            margin: 15px;
+            border-radius: 5px;
+            transition: background-color 0.3s, transform 0.2s;
+        }
+
+        .button:hover {
+            transform: scale(1.1);
+        }
+
+        .imgButton {
+            background-color: #47227b;
+            color: white;
+            border: none;
+        }
+
+        .imgButton:hover {
+            background-color: #9554a9;
+        }
+
+        .vidButton {
+            background-color: #0da8d3;
+            color: white;
+            border: none;
+        }
+
+        .vidButton:hover {
+            background-color: #23a793;
+        }
+
+        .muteButton {
+            background-color: #e15555;
+            color: white;
+            border: none;
+        }
+
+        .muteButton:hover {
+            background-color: #e77c42;
+        }
+
+        /* Info Section */
+        #shapesInfo {
+            margin-top: 20px;
+            color: #444;
+        }
+
+        /* Hide the buttons when not needed */
+        .hidden {
+            display: none;
+        }
+        
     </style>
     <script src="https://cdn.jsdelivr.net/npm/tone@14.8.42/build/Tone.js"></script>
 </head>
@@ -25,11 +104,18 @@
 
     <button class="button muteButton" id="muteButton" onclick="mute()" style="display: none;">Mute</button>
 
-    <canvas id="canvas"></canvas>
+    <canvas id="canvas" style="display: none;"></canvas>
     <div id="shapesInfo" style="margin-top: 20px;"></div>
 
     <script>
-        const osc = new Tone.Oscillator(440, "sine").toDestination();
+        var ampEnv = new Tone.AmplitudeEnvelope({
+            "attack": 0.3,
+            "decay": 1,
+            "sustain": 0.5,
+            "release": 5
+        }).toMaster();
+        var osc = new Tone.Oscillator().connect(ampEnv).toDestination();
+        ampEnv.triggerAttackRelease("32t");
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         let imageData = null;
@@ -51,6 +137,7 @@
 
             const img = new Image();
             img.onload = function() {
+                document.getElementById("canvas").style.display = 'block';
                 const ogHeight = img.height;
                 const ogWidth = img.width;
                 const aspectRatio = ogHeight/ ogWidth;
@@ -80,15 +167,11 @@
                 const shapes = getShapes(pixels);
                 // displayShapesInfo(shapes);
                 const sounds = getSoundsByPixel(shapes);
-                console.log(sounds);
                 document.getElementById("muteButton").style.display = "inline";
                 canvas.addEventListener('click', function(event) {
-                    console.log("Click");
                     const canvasRect = canvas.getBoundingClientRect();
                     const x = Math.floor((event.clientX - canvasRect.left) / (canvas.width / imageData.width));
                     const y = Math.floor((event.clientY - canvasRect.top) / (canvas.height / imageData.height));
-                    console.log(sounds);
-                    console.log(x, y);
                     keyString = y + ',' + x;
                     const sound = sounds[keyString];
                     if (sound) {
@@ -216,8 +299,6 @@
                 const luminance = (color[0] * 0.2126) + (color[1] * 0.7152) + (color[2] * 0.0722);
                 const sound = getSound(maxSize, size, color, luminance);
                 for (i = 1; i < size; i++) {
-                    console.log(shapes[key][i]);
-                    console.log("check");
                     keyString = shapes[key][i][0] + ',' + shapes[key][i][1];
                     sounds[keyString] = sound;
                 }
@@ -257,7 +338,6 @@
             osc.partials = sound[2];
             osc.toDestination();
             osc.start();
-            console.log(sound);
         }
 
         function triggerVideoUpload() {
@@ -265,7 +345,6 @@
         }
 
         function handleVideoUpload(event) {
-            console.log(0);
             const file = event.target.files[0];
             if (!file) return;
 
@@ -278,6 +357,7 @@
             video.onloadeddata = function() {
                 video.play();
                 processVideoFrames(video);
+                video.style.display = 'none';
             };
 
             video.addEventListener('ended', function() {
@@ -288,30 +368,33 @@
         function processVideoFrames(video) {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
+            document.body.appendChild(canvas);
             let frames = [];
             let currentTime = 0;
             video.onplay = () => {
                 let interval = setInterval(() => {
                     if (currentTime < video.duration) {
                         video.currentTime = currentTime;
-                        currentTime += 0.0421;
-                        processFrame(video, canvas, ctx, frames.length);
-                        frames.push(canvas.toDataURL());
+                        currentTime += 0.06;
+                        processFrame(video, canvas, ctx);
                     } else {
                         clearInterval(interval);
                     }
-                }, 42);
+                }, 60);
             };
         }
 
-        function processFrame(video, canvas, ctx, frameIndex) {
+        function processFrame(video, canvas, ctx) {
             const width = video.videoWidth;
             const height = video.videoHeight;
-            canvas.width = width;
-            canvas.height = height;
-            ctx.drawImage(video, 0, 0, width, height);
+            const aspectRatio = width / height;
+            const newWidth = 1000;
+            const newHeight = 1000 / aspectRatio;
+            canvas.width = newWidth;
+            canvas.height = newHeight;
+            ctx.drawImage(video, 0, 0, width, height, 0, 0, newWidth, newHeight);
 
-            const imageData = ctx.getImageData(0, 0, width, height);
+            const imageData = ctx.getImageData(0, 0, newWidth, newHeight);
             const pixels = [];
             data = imageData.data;
             bigPixel = [0, 0, 0, 0];
